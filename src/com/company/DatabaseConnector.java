@@ -29,7 +29,7 @@ public class DatabaseConnector {
         ) {
             stmt.setString(1, user.login);
             stmt.setString(2, user.email);
-            stmt.setString(3, user.password);
+            stmt.setString(3, encrypt(user.password));
             stmt.executeUpdate();
         }
         catch (SQLException ex) {
@@ -38,8 +38,22 @@ public class DatabaseConnector {
         }
         return true;
     }
+    // 123 => 3211
+    private String encrypt(String password){
+        char[] encryptedPassword = new char[password.length()+1];
+        for (int i = password.length() - 1, j = 0; i >= 0; i--, j++){
+            encryptedPassword[j] = password.charAt(i);
+        }
+        encryptedPassword[password.length()] = encryptedPassword[password.length() - 1];
+        return new String(encryptedPassword);
+    }
 
-    public boolean authorize (User user) {
+    /*
+      Теперь метод authorize возвращает не просто успешность авторизации,
+      а так же, авторизованного пользователя при успешной авторизации.
+      Если же авторизация была неуспешна(пароль или логин неверны) возвращается null
+    */
+    public AuthorizedUser authorize (User user) {
         String SQL = "select id from users where login = ?";
         int id = -1;
         try(Connection conn = connect();
@@ -53,18 +67,16 @@ public class DatabaseConnector {
         }
         catch (SQLException ex) {
             System.out.println(ex.getMessage());
-            return false;
+            return null;
         }
         if (id == -1) {
-            return false;
+            return null;
         }
         // check password
-        return checkLoginAndPassword(user, id);
+        return checkLoginAndPassword(user, id) ? getUserData(id) : null;
     }
 
-    private String decrypt (String password) {
-        return "";
-    }
+
 
     //asd => 123
     //asd => 12345
@@ -75,7 +87,7 @@ public class DatabaseConnector {
             PreparedStatement stmt = conn.prepareStatement(SQL)
         ) {
             stmt.setString(1, user.login);
-            stmt.setString(2, user.password);
+            stmt.setString(2, encrypt(user.password));
             ResultSet rs = stmt.executeQuery();
             if(rs.next()){
                 count = rs.getInt("cnt");
@@ -170,4 +182,26 @@ public class DatabaseConnector {
         }
     }
 
+    /*
+     * Метод получающий всю информацию нашего пользователя
+     */
+    public AuthorizedUser getUserData(int id) {
+        String SQL = "select login, email, date_of_registration from users where id = ?";
+        AuthorizedUser user = null;
+        int count = 0;
+        try(Connection conn = connect();
+            PreparedStatement stmt = conn.prepareStatement(SQL)
+        ) {
+            stmt.setInt(1, id);
+            ResultSet rs = stmt.executeQuery();
+            if(rs.next()){
+                user = new AuthorizedUser(rs.getString("login"), rs.getString("email"), "", rs.getTimestamp("date_of_registration"));
+            }
+
+        }
+        catch (SQLException ex) {
+            System.out.println(ex.getMessage());
+        }
+        return user;
+    }
 }
